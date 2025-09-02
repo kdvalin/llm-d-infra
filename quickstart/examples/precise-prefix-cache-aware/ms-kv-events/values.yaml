@@ -1,13 +1,13 @@
 multinode: false
 
 modelArtifacts:
-  uri: "hf://Qwen/Qwen3-0.6B"
-  size: 20Gi
+  uri: "hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"
+  size: 140Gi
   authSecretName: "llm-d-hf-token"
-  name: "Qwen/Qwen3-0.6B"
+  name: "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"
 
 routing:
-  modelName: Qwen/Qwen3-0.6B
+  modelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
   servicePort: 8000
   parentRefs:
     - group: gateway.networking.k8s.io
@@ -37,7 +37,7 @@ decode:
   replicas: 2
   monitoring:
     podmonitor:
-      enabled: false
+      enabled: true
       portName: "metrics"  # decode vLLM service port (from routing.proxy.targetPort)
       path: "/metrics"
       interval: "30s"
@@ -50,14 +50,16 @@ decode:
       - '-c'
     args:
       - |
-        vllm serve Qwen/Qwen3-0.6B \
+        vllm serve RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic \
+        --served-model-name RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic \
+        --tensor-parallel-size 2 \
+        --max-model-len 20000 \
         --host 0.0.0.0 \
         --port 8200 \
         --block-size 64 \
         --prefix-caching-hash-algo sha256_cbor_64bit \
-        --enforce-eager \
         --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}' \
-        --kv-events-config "{\"enable_kv_cache_events\":true,\"publisher\":\"zmq\",\"endpoint\":\"tcp://gaie-kv-events-epp.llm-d.svc.cluster.local:5557\",\"topic\":\"kv@${POD_IP}@Qwen/Qwen3-0.6B\"}" \
+        --kv-events-config "{\"enable_kv_cache_events\":true,\"publisher\":\"zmq\",\"endpoint\":\"tcp://gaie-kv-events-epp.llm-d.svc.cluster.local:5557\",\"topic\":\"kv@${POD_IP}@RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic\"}"
     env:
       - name: PYTHONHASHSEED
         value: "42"
@@ -67,7 +69,7 @@ decode:
             apiVersion: v1
             fieldPath: status.podIP
       - name: CUDA_VISIBLE_DEVICES
-        value: "0"
+        value: "0,1"
       - name: UCX_TLS
         value: "cuda_ipc,cuda_copy,tcp"
       - name: VLLM_NIXL_SIDE_CHANNEL_HOST
@@ -86,21 +88,26 @@ decode:
         protocol: TCP
     resources:
       limits:
-        nvidia.com/gpu: "1"
+        nvidia.com/gpu: "2"
       requests:
-        nvidia.com/gpu: "1"
+        nvidia.com/gpu: "2"
     mountModelVolume: true
     volumeMounts:
     - name: metrics-volume
       mountPath: /.config
     - name: torch-compile-cache
       mountPath: /.cache
+    - name: dshm
+      mountPath: /dev/shm
   volumes:
   - name: metrics-volume
     emptyDir: {}
   - name: torch-compile-cache
     emptyDir: {}
-
+  - name: dshm
+    emptyDir:
+      medium: Memory
+      sizeLimit: "2Gi"
 # PD disabled in this example
 prefill:
   create: false
