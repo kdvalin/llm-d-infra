@@ -1,13 +1,18 @@
+{{- $model := (env "MODEL") | default "Qwen/Qwen3-0.6B" -}}
+{{- $url := (env "MODEL_URL") | default (printf "hf://%s" $model) -}}
+{{- $gpus := (env "GPUS") | default 1 | int -}}
+{{- $enable_podmonitor := eq (env "ENABLE_PODMONITOR") "true" | default false -}}
+
 multinode: false
 
 modelArtifacts:
-  uri: "hf://Qwen/Qwen3-0.6B"
-  name: "Qwen/Qwen3-0.6B"
-  size: 20Gi
+  uri: "{{ $url }}"
+  name: "{{ $model }}"
+  size: {{ (env "MODEL_SIZE_GB") | default 20 | int }}Gi
   authSecretName: "llm-d-hf-token"
 
 routing:
-  modelName: Qwen/Qwen3-0.6B
+  modelName: "{{ $model }}"
   servicePort: 8000
   parentRefs:
     - group: gateway.networking.k8s.io
@@ -34,10 +39,10 @@ routing:
 
 decode:
   create: true
-  replicas: 2
+  replicas: {{ (env "DECODE_REPLICAS") | default 2 | int }}
   monitoring:
     podmonitor:
-      enabled: false
+      enabled: {{ $enable_podmonitor }}
       portName: "metrics"  # decode vLLM service port (from routing.proxy.targetPort)
       path: "/metrics"
       interval: "30s"
@@ -51,7 +56,7 @@ decode:
       - '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}'
     env:
       - name: CUDA_VISIBLE_DEVICES
-        value: "0"
+        value: "{{range $i := $gpus}}{{if $i}},{{end}}{{$i}}{{end}}"
       - name: UCX_TLS
         value: "cuda_ipc,cuda_copy,tcp"
       - name: VLLM_NIXL_SIDE_CHANNEL_HOST
@@ -70,9 +75,9 @@ decode:
         protocol: TCP
     resources:
       limits:
-        nvidia.com/gpu: "1"
+        nvidia.com/gpu: "{{ $gpus }}"
       requests:
-        nvidia.com/gpu: "1"
+        nvidia.com/gpu: "{{ $gpus }}"
     mountModelVolume: true
     volumeMounts:
     - name: metrics-volume

@@ -49,7 +49,7 @@ releases:
     needs:
       - {{ printf "infra-%s" $rn | quote }}
     values:
-      - gaie-inference-scheduling/values.yaml
+      - gaie-inference-scheduling/values.yaml.gotmpl
     {{- if or (eq .Environment.Name "gke") (eq .Environment.Name "gke_tpu") }}
       - provider:
           name: {{ .Environment.Values.provider.name }}
@@ -69,7 +69,7 @@ releases:
     {{- if eq .Environment.Name "gke_tpu" }}
       - ms-inference-scheduling/values_tpu.yaml
     {{- else }}
-      - ms-inference-scheduling/values.yaml
+      - ms-inference-scheduling/values.yaml.gotmpl
     {{- end }}
     set:
     # apply release name derived values
